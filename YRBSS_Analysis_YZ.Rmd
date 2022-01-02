@@ -1,0 +1,705 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+---
+## Combining tables
+
+```{r, message=FALSE, warning=FALSE}
+library(dplyr)
+library(tidyverse)
+library(ggrepel)
+library(dslabs)
+library(table1) # for table generation
+library('yarrr') # for color palettes
+library(mice) # for missing value
+library(corrplot) # for correlation plot
+library(splines2) # for spline(year)
+```
+
+The information we need for a given analysis may not be in just one table. Here we use a simple example to illustrate the general challenge of combining tables.
+
+```{r, include=FALSE}
+data1999 <- read_csv("1999_data.csv")
+data2001 <- read_csv("2001_data.csv")
+data2003 <- read_csv("2003_data.csv")
+data2005 <- read_csv("2005_data.csv")
+data2007 <- read_csv("2007_data.csv")
+data2009 <- read_csv("2009_data.csv")
+data2011 <- read_csv("2011_data.csv")
+data2013 <- read_csv("2013_data.csv")
+```
+
+```{r, include=FALSE}
+names(data1999)[1] <- 'year'
+names(data2001)[1] <- 'year'
+names(data2003)[1] <- 'year'
+names(data2005)[1] <- 'year'
+names(data2007)[1] <- 'year'
+names(data2009)[1] <- 'year'
+names(data2011)[1] <- 'year'
+names(data2013)[1] <- 'year'
+data1999$year <- rep(1999, dim(data1999)[1])
+data2001$year <- rep(2001, dim(data2001)[1])
+data2003$year <- rep(2003, dim(data2003)[1])
+data2005$year <- rep(2005, dim(data2005)[1])
+data2007$year <- rep(2007, dim(data2007)[1])
+data2009$year <- rep(2009, dim(data2009)[1])
+data2011$year <- rep(2011, dim(data2011)[1])
+data2013$year <- rep(2013, dim(data2013)[1])
+```
+
+```{r, include=FALSE}
+head(data1999)
+head(data2001)
+head(data2003)
+head(data2005)
+head(data2007)
+head(data2009)
+head(data2011)
+head(data2013)
+```
+
+```{r,include=FALSE}
+data1999 <- data1999 %>% mutate(race = as.character(race))
+data2001 <- data2001 %>% mutate(race = as.character(race))
+data2003 <- data2003 %>% mutate(race = as.character(race))
+data2005 <- data2005 %>% mutate(race = as.character(race))
+```
+
+```{r, include=FALSE}
+data_all <- dplyr::bind_rows(data2007,data1999,data2001,data2003,data2005,data2009,data2011,data2013)
+data_all <- data_all[order(data_all$year),]
+#write.csv(data_all, file="yrbs.csv",row.names = FALSE)
+```
+
+```{r}
+data_all <- read_csv("yrbs.csv")
+
+data_all$race3 <- data_all$race2
+data_all$race3[data_all$hispanic == 1
+               & is.na(data_all$race2)] <- 'Hispanic or Latino'
+data_all$race3[data_all$hispanic == 1
+               & data_all$race2=='Multiple'] <- "Multiple - Hispanic"
+data_all$race3[data_all$hispanic == 2
+               & data_all$race2=='Multiple'] <- "Multiple - Non-hispanic"
+data_all$race3[data_all$race3=='Multiple'] <- NA
+
+data_all$bmi3 <- data_all$BMI2
+data_all$bmi3[data_all$BMI2 == 1] <- "Very underweight"
+data_all$bmi3[data_all$BMI2 == 2] <- "Slightly underweight"
+data_all$bmi3[data_all$BMI2 == 3] <- "About the right weight"
+data_all$bmi3[data_all$BMI2 == 4] <- "Slightly overweight"
+data_all$bmi3[data_all$BMI2 == 5] <- "Very overweight"
+
+data_all$uwcbs <- data_all$UWCBs
+data_all$uwcbs[data_all$UWCBs == 1] <- 'Yes'
+data_all$uwcbs[data_all$UWCBs == 0] <- 'No'
+
+
+data_all$`weight management2`[data_all$`weight management2` == "Not trying to do anything"] <- "0"
+
+```
+
+```{r}
+table1::label(data_all$bmi3) <- "BMI - Weight Status"
+table1::label(data_all$uwcbs) <- "Attempting UWCBs"
+
+table1(~ bmi3 + uwcbs| factor(age2), data=data_all,
+       caption = 'Table 1 Descriptive statistics of participant’s weight and UWCBs by age' )
+```
+
+```{r}
+data_new <- data_all %>% filter(age2 > 13)
+data_new$age3 <- factor(data_new$age2)
+table1::label(data_new$sex2) <- "Sex"
+table1::label(data_new$race3) <- "Race"
+table1::label(data_new$age3) <- "Age (years)"
+table1(~ sex2 + age3 + race3 + bmi3 + uwcbs | as.factor(year), data=data_new,
+        caption = 'Table 2 Demographics of participants by year' )
+```
+
+## Results
+#### Preliminary Statistics
+PartI Prevalence of UWCBs from 1999-2013
+```{r}
+# Distribution of BMI
+table(data_new$year)
+table(data_new$year[data_new$uwcbs=="Yes"])
+
+n_total = c(table(data_new$year)[[1]],
+          table(data_new$year)[[2]],
+          table(data_new$year)[[3]],
+          table(data_new$year)[[4]],
+          table(data_new$year)[[5]],
+          table(data_new$year)[[6]],
+          table(data_new$year)[[7]],
+          table(data_new$year)[[8]])
+
+n_uwcbs =c(table(data_new$year[data_new$uwcbs=="Yes"])[[1]],
+          table(data_new$year[data_new$uwcbs=="Yes"])[[2]],
+          table(data_new$year[data_new$uwcbs=="Yes"])[[3]],
+          table(data_new$year[data_new$uwcbs=="Yes"])[[4]],
+          table(data_new$year[data_new$uwcbs=="Yes"])[[5]],
+          table(data_new$year[data_new$uwcbs=="Yes"])[[6]],
+          table(data_new$year[data_new$uwcbs=="Yes"])[[7]],
+          table(data_new$year[data_new$uwcbs=="Yes"])[[8]])
+
+n_prevalence = n_uwcbs/n_total
+mean(n_prevalence)
+sd(n_prevalence)
+years = c('1999','2001','2003','2005','2007','2009','2011','2013')
+temp_dat <- data.frame(n_prevalence,years)
+```
+
+```{r}
+#############Here comes to female
+data_female <- data_all %>% filter(sex == 1)
+table(data_female$year)
+table(data_female$year[data_new$uwcbs=="Yes"])
+
+female_total = c(table(data_female$year)[[1]],
+          table(data_female$year)[[2]],
+          table(data_female$year)[[3]],
+          table(data_female$year)[[4]],
+          table(data_female$year)[[5]],
+          table(data_female$year)[[6]],
+          table(data_female$year)[[7]],
+          table(data_female$year)[[8]])
+
+female_uwcbs =c(table(data_female$year[data_female$uwcbs=="Yes"])[[1]],
+          table(data_female$year[data_female$uwcbs=="Yes"])[[2]],
+          table(data_female$year[data_female$uwcbs=="Yes"])[[3]],
+          table(data_female$year[data_female$uwcbs=="Yes"])[[4]],
+          table(data_female$year[data_female$uwcbs=="Yes"])[[5]],
+          table(data_female$year[data_female$uwcbs=="Yes"])[[6]],
+          table(data_female$year[data_female$uwcbs=="Yes"])[[7]],
+          table(data_female$year[data_female$uwcbs=="Yes"])[[8]])
+
+female_prevalence = female_uwcbs/female_total
+mean(female_prevalence)
+sd(female_prevalence)
+#############Here comes to male
+data_male <- data_all %>% filter(sex == 2)
+table(data_male$year)
+table(data_male$year[data_new$uwcbs=="Yes"])
+
+male_total = c(table(data_male$year)[[1]],
+          table(data_male$year)[[2]],
+          table(data_male$year)[[3]],
+          table(data_male$year)[[4]],
+          table(data_male$year)[[5]],
+          table(data_male$year)[[6]],
+          table(data_male$year)[[7]],
+          table(data_male$year)[[8]])
+
+male_uwcbs =c(table(data_male$year[data_male$uwcbs=="Yes"])[[1]],
+          table(data_male$year[data_male$uwcbs=="Yes"])[[2]],
+          table(data_male$year[data_male$uwcbs=="Yes"])[[3]],
+          table(data_male$year[data_male$uwcbs=="Yes"])[[4]],
+          table(data_male$year[data_male$uwcbs=="Yes"])[[5]],
+          table(data_male$year[data_male$uwcbs=="Yes"])[[6]],
+          table(data_male$year[data_male$uwcbs=="Yes"])[[7]],
+          table(data_male$year[data_male$uwcbs=="Yes"])[[8]])
+
+male_prevalence = male_uwcbs/male_total
+mean(male_prevalence)
+sd(male_prevalence)
+
+temp_dat <- data.frame(n_prevalence,years,male_prevalence,female_prevalence)
+```
+
+```{r}
+barplot(n_prevalence~years,data=temp_dat,
+        col = c("lightblue", "mistyrose", "lightcyan",
+                "lavender", "cornsilk"
+                #,piratepal("pony", trans =.4, length.out = 3)
+                ),
+     #col = piratepal("pony", trans =.4, length.out = 8),
+     ylim = c(0.1,0.3),
+     xpd=FALSE, width=0.9,
+     border = "white",
+     xlab = 'Year', ylab = 'Frequency',
+     main='Prevalence of UWCBs')
+lines(temp_dat$female_prevalence, col='hot pink', lwd=1.5)
+lines(temp_dat$male_prevalence,type='l',col='blue', lwd=1.5)
+legend('topright', lwd=1.5, col=c('hotpink','blue'),
+       legend=c('Female','Male'), box.col='white')
+```
+
+Self-perceived weight bias
+```{r, warning=FALSE}
+table1(~ `self-perceived weight bias`|bmi3, data=data_new,
+       caption = 'Table 4 Descriptive statistics of self-perceived weight bias by BMI' )
+```
+
+```{r, warning=FALSE}
+table1(~ `self-perceived weight bias`|year*bmi3, data=data_new,
+       caption = 'Table 4 Descriptive statistics of self-perceived weight bias by BMI stratified by years' )
+```
+
+```{r}
+boxplot(data_new$`self-perceived weight bias` ~ 
+          factor(data_new$BMI2,
+                 labels = c("severe/moderate underweight", "mild underweight",
+                            "normal range", "overweight", "obesity")),
+        col=  piratepal("pony",trans =.4), na.rm = TRUE,
+        xlab = "BMI Category", ylab = "Self-perceived Weight Bias",
+        main = 'Figure 2-1: Self-perceived weight bias by BMI',
+        cex.axis = 0.54)
+legend('topright', c("severe/moderate underweight", "mild underweight",
+               "normal range", "overweight", "obesity"),
+       fill = piratepal("pony",trans =.4), cex=0.7)
+```
+
+Take a look at pirateplot
+```{r}
+pirateplot(formula = `self-perceived weight bias` ~ 
+             factor(BMI2, labels = c("severe/moderate underweight", "mild underweight",
+                                     "normal range", "overweight", "obesity")),
+           data = data_new,
+           pal=  piratepal("pony"), 
+           xlab = "BMI Category", ylab = "Self-perceived Weight Bias",
+           main = 'Figure 2-2: Self-perceived weight bias by BMI',
+           cex.axis = 0.77, cex.names = 0.54,
+           avg.line.lwd = 3,
+           point.cex=0.5, point.lwd=0.5, point.o=0.5, point.col=gray(.1))
+legend('topright', c("severe/moderate underweight", "mild underweight",
+               "normal range", "overweight", "obesity"),
+       fill = piratepal("pony",trans =.5), cex=0.7)
+```
+
+```{r}
+data_bmi1 <- data_all %>% filter(BMI2 == 1)
+data_bmi2 <- data_all %>% filter(BMI2 == 2)
+data_bmi3 <- data_all %>% filter(BMI2 == 3)
+data_bmi4 <- data_all %>% filter(BMI2 == 4)
+data_bmi5 <- data_all %>% filter(BMI2 == 5)
+
+
+mean(data_bmi1$`self-perceived weight bias`,na.rm=TRUE)
+mean(data_bmi2$`self-perceived weight bias`,na.rm=TRUE)
+mean(data_bmi3$`self-perceived weight bias`,na.rm=TRUE)
+mean(data_bmi4$`self-perceived weight bias`,na.rm=TRUE)
+mean(data_bmi5$`self-perceived weight bias`,na.rm=TRUE)
+```
+
+Preliminary Analysis - Missing values
+
+```{r}
+dim(data_new)
+sum(is.na(data_new[c(2:4, 7:20, 23:25)]))
+na_data <- md.pattern(data_new[c(2:4, 7:20, 23:25)], plot = FALSE, rotate.name = TRUE)
+
+m_data <- na_data[order(na_data[,ncol(na_data)], decreasing = TRUE),]
+colnames(m_data)[ncol(na_data)] <- "sum"
+m_data[1,]
+```
+
+Table 6 Missing-data patterns
+
+| Variable | # of Missing | Variable | # of Missing |
+|-----|----|-----|----|
+| Age | 0 | Sex | 208 |
+| Grade | 251 | Suicide |832|
+| weight management | 1632 | self-perceived weight| 1895 |
+| vomit/laxative | 2176 | diet pills | 2351 |
+| marijuana | 2694 | fast | 3133 |
+| drive_drink | 3188 | smoke_level | 3481 |
+| smoke | 5357 | PE | 7476 |
+| smoke_quit | 7565 | height | 7769 |
+| weight | 7769 | alcohol  | 8713 |
+| sexual | 8979 | condom | 10369 |
+| sum | 85838 | | |
+
+```{r}
+# Do correlation test to assess whether the missingness indicator m_uwcbs is associated with other covariates
+cor.test(data_new$m_uwcbs, data_new$BMI2)
+cor.test(data_new$m_uwcbs, data_new$`self-perceived weight`)
+```
+
+#### Inferential Statistics Analysis
+```{r}
+#############Here comes to different bmi1 groups
+table(data_bmi1$year)
+table(data_bmi1$year[data_bmi1$uwcbs=="Yes"])
+
+bmi1_total = c(table(data_bmi1$year)[[1]],
+               table(data_bmi1$year)[[2]],
+               table(data_bmi1$year)[[3]],
+               table(data_bmi1$year)[[4]],
+               table(data_bmi1$year)[[5]],
+               table(data_bmi1$year)[[6]],
+               table(data_bmi1$year)[[7]],
+               table(data_bmi1$year)[[8]])
+
+bmi1_uwcbs =c(table(data_bmi1$year[data_bmi1$uwcbs=="Yes"])[[1]],
+              table(data_bmi1$year[data_bmi1$uwcbs=="Yes"])[[2]],
+              table(data_bmi1$year[data_bmi1$uwcbs=="Yes"])[[3]],
+              table(data_bmi1$year[data_bmi1$uwcbs=="Yes"])[[4]],
+              table(data_bmi1$year[data_bmi1$uwcbs=="Yes"])[[5]],
+              table(data_bmi1$year[data_bmi1$uwcbs=="Yes"])[[6]],
+              table(data_bmi1$year[data_bmi1$uwcbs=="Yes"])[[7]],
+              table(data_bmi1$year[data_bmi1$uwcbs=="Yes"])[[8]])
+
+bmi1_prevalence = bmi1_uwcbs/bmi1_total
+mean(bmi1_prevalence)
+sd(bmi1_prevalence)
+
+#############Here comes to different bmi groups
+table(data_bmi2$year)
+table(data_bmi2$year[data_bmi2$uwcbs=="Yes"])
+
+bmi2_total = c(table(data_bmi2$year)[[1]],
+               table(data_bmi2$year)[[2]],
+               table(data_bmi2$year)[[3]],
+               table(data_bmi2$year)[[4]],
+               table(data_bmi2$year)[[5]],
+               table(data_bmi2$year)[[6]],
+               table(data_bmi2$year)[[7]],
+               table(data_bmi2$year)[[8]])
+
+bmi2_uwcbs =c(table(data_bmi2$year[data_bmi2$uwcbs=="Yes"])[[1]],
+              table(data_bmi2$year[data_bmi2$uwcbs=="Yes"])[[2]],
+              table(data_bmi2$year[data_bmi2$uwcbs=="Yes"])[[3]],
+              table(data_bmi2$year[data_bmi2$uwcbs=="Yes"])[[4]],
+              table(data_bmi2$year[data_bmi2$uwcbs=="Yes"])[[5]],
+              table(data_bmi2$year[data_bmi2$uwcbs=="Yes"])[[6]],
+              table(data_bmi2$year[data_bmi2$uwcbs=="Yes"])[[7]],
+              table(data_bmi2$year[data_bmi2$uwcbs=="Yes"])[[8]])
+
+bmi2_prevalence = bmi2_uwcbs/bmi2_total
+mean(bmi2_prevalence)
+sd(bmi2_prevalence)
+
+#############Here comes to different bmi groups
+table(data_bmi3$year)
+table(data_bmi3$year[data_bmi3$uwcbs=="Yes"])
+
+bmi3_total = c(table(data_bmi3$year)[[1]],
+               table(data_bmi3$year)[[2]],
+               table(data_bmi3$year)[[3]],
+               table(data_bmi3$year)[[4]],
+               table(data_bmi3$year)[[5]],
+               table(data_bmi3$year)[[6]],
+               table(data_bmi3$year)[[7]],
+               table(data_bmi3$year)[[8]])
+
+bmi3_uwcbs =c(table(data_bmi3$year[data_bmi3$uwcbs=="Yes"])[[1]],
+              table(data_bmi3$year[data_bmi3$uwcbs=="Yes"])[[2]],
+              table(data_bmi3$year[data_bmi3$uwcbs=="Yes"])[[3]],
+              table(data_bmi3$year[data_bmi3$uwcbs=="Yes"])[[4]],
+              table(data_bmi3$year[data_bmi3$uwcbs=="Yes"])[[5]],
+              table(data_bmi3$year[data_bmi3$uwcbs=="Yes"])[[6]],
+              table(data_bmi3$year[data_bmi3$uwcbs=="Yes"])[[7]],
+              table(data_bmi3$year[data_bmi3$uwcbs=="Yes"])[[8]])
+
+bmi3_prevalence = bmi3_uwcbs/bmi3_total
+mean(bmi3_prevalence)
+sd(bmi3_prevalence)
+
+#############Here comes to different bmi groups
+
+table(data_bmi4$year)
+table(data_bmi4$year[data_bmi4$uwcbs=="Yes"])
+
+bmi4_total = c(table(data_bmi4$year)[[1]],
+               table(data_bmi4$year)[[2]],
+               table(data_bmi4$year)[[3]],
+               table(data_bmi4$year)[[4]],
+               table(data_bmi4$year)[[5]],
+               table(data_bmi4$year)[[6]],
+               table(data_bmi4$year)[[7]],
+               table(data_bmi4$year)[[8]])
+
+bmi4_uwcbs =c(table(data_bmi4$year[data_bmi4$uwcbs=="Yes"])[[1]],
+              table(data_bmi4$year[data_bmi4$uwcbs=="Yes"])[[2]],
+              table(data_bmi4$year[data_bmi4$uwcbs=="Yes"])[[3]],
+              table(data_bmi4$year[data_bmi4$uwcbs=="Yes"])[[4]],
+              table(data_bmi4$year[data_bmi4$uwcbs=="Yes"])[[5]],
+              table(data_bmi4$year[data_bmi4$uwcbs=="Yes"])[[6]],
+              table(data_bmi4$year[data_bmi4$uwcbs=="Yes"])[[7]],
+              table(data_bmi4$year[data_bmi4$uwcbs=="Yes"])[[8]])
+
+bmi4_prevalence = bmi4_uwcbs/bmi4_total
+mean(bmi4_prevalence)
+sd(bmi4_prevalence)
+
+#############Here comes to different bmi groups
+
+table(data_bmi5$year)
+table(data_bmi5$year[data_bmi5$uwcbs=="Yes"])
+
+bmi5_total = c(table(data_bmi5$year)[[1]],
+               table(data_bmi5$year)[[2]],
+               table(data_bmi5$year)[[3]],
+               table(data_bmi5$year)[[4]],
+               table(data_bmi5$year)[[5]],
+               table(data_bmi5$year)[[6]],
+               table(data_bmi5$year)[[7]],
+               table(data_bmi5$year)[[8]])
+
+bmi5_uwcbs =c(table(data_bmi5$year[data_bmi5$uwcbs=="Yes"])[[1]],
+              table(data_bmi5$year[data_bmi5$uwcbs=="Yes"])[[2]],
+              table(data_bmi5$year[data_bmi5$uwcbs=="Yes"])[[3]],
+              table(data_bmi5$year[data_bmi5$uwcbs=="Yes"])[[4]],
+              table(data_bmi5$year[data_bmi5$uwcbs=="Yes"])[[5]],
+              table(data_bmi5$year[data_bmi5$uwcbs=="Yes"])[[6]],
+              table(data_bmi5$year[data_bmi5$uwcbs=="Yes"])[[7]],
+              table(data_bmi5$year[data_bmi5$uwcbs=="Yes"])[[8]])
+
+bmi5_prevalence = bmi5_uwcbs/bmi5_total
+mean(bmi5_prevalence)
+sd(bmi5_prevalence)
+```
+
+```{r, warning=FALSE}
+temp_dat <- data.frame(n_prevalence,years,male_prevalence,female_prevalence,
+                       bmi1_prevalence,bmi2_prevalence,bmi3_prevalence,bmi4_prevalence,bmi5_prevalence)
+
+plot( temp_dat$years,temp_dat$bmi1_prevalence, col=piratepal("pony", trans =.3)[1],
+      lwd=2, type='line', ylim = c(0.05,0.4),
+     xlab = 'Year', ylab = 'Frequency', main='Figure 3: Prevalence of UWCBs')
+lines(temp_dat$years,temp_dat$bmi2_prevalence,
+      col=piratepal("pony", trans =.3)[3], lwd=2)
+lines(temp_dat$years,temp_dat$bmi3_prevalence,
+      col=piratepal("pony", trans =.3)[2], lwd=2)
+lines(temp_dat$years,temp_dat$bmi4_prevalence,
+      col=piratepal("pony", trans =.3)[4], lwd=2)
+lines(temp_dat$years,temp_dat$bmi5_prevalence,
+      col=piratepal("pony", trans =.3)[5], lwd=2)
+legend('topright', lwd=1.5, cex=0.8,
+       col=piratepal("pony", trans =.3)[c(1,3,2,4,5)],
+       legend=c('Very underweight', 'Slightly underweight', 'About the right weight',
+                'Slightly overweight', 'Very overweight'))
+```
+
+```{r}
+table1(~  uwcbs | bmi3*`weight management2`, data=data_new,
+       caption = 'Table 2 Demographics of participants by year' )
+```
+
+```{r}
+data_1999 <- data_all %>% filter(year == 1999)
+data_2001 <- data_all %>% filter(year == 2001)
+data_2003 <- data_all %>% filter(year == 2003)
+data_2005 <- data_all %>% filter(year == 2005)
+data_2007 <- data_all %>% filter(year == 2007)
+data_2009 <- data_all %>% filter(year == 2009)
+data_2011 <- data_all %>% filter(year == 2011)
+data_2013 <- data_all %>% filter(year == 2013)
+```
+
+
+```{r, include=FALSE}
+summary( glm(UWCBs ~ bmi3,
+                 data = data_new, family=binomial()))
+summary( glm(UWCBs ~ bmi3,
+                 data = data_1999, family=binomial()))
+summary( glm(UWCBs ~ bmi3,
+                 data = data_2001, family=binomial()))
+summary( glm(UWCBs ~ bmi3,
+                 data = data_2003, family=binomial()))
+summary( glm(UWCBs ~ bmi3,
+                 data = data_2005, family=binomial()))
+summary( glm(UWCBs ~ bmi3,
+                 data = data_2007, family=binomial()))
+summary( glm(UWCBs ~ bmi3,
+                 data = data_2009, family=binomial()))
+summary( glm(UWCBs ~ bmi3,
+                 data = data_2011, family=binomial()))
+summary( glm(UWCBs ~ bmi3,
+                 data = data_2013, family=binomial()))
+```
+
+```{r}
+OR_unadjusted = matrix(0,4,9)
+
+OR_unadjusted[,1]=exp(coef(glm(UWCBs ~ bmi3,
+                 data = data_1999, family=binomial())))[2:5]
+OR_unadjusted[,2]=exp(coef(glm(UWCBs ~ bmi3,
+                 data = data_2001, family=binomial())))[2:5]
+OR_unadjusted[,3]=exp(coef(glm(UWCBs ~ bmi3,
+                 data = data_2003, family=binomial())))[2:5]
+OR_unadjusted[,4]=exp(coef(glm(UWCBs ~ bmi3,
+                 data = data_2005, family=binomial())))[2:5]
+OR_unadjusted[,5]=exp(coef(glm(UWCBs ~ bmi3,
+                 data = data_2007, family=binomial())))[2:5]
+OR_unadjusted[,6]=exp(coef(glm(UWCBs ~ bmi3,
+                 data = data_2009, family=binomial())))[2:5]
+OR_unadjusted[,7]=exp(coef(glm(UWCBs ~ bmi3,
+                 data = data_2011, family=binomial())))[2:5]
+OR_unadjusted[,8]=exp(coef(glm(UWCBs ~ bmi3,
+                 data = data_2013, family=binomial())))[2:5]
+OR_unadjusted[,9] = exp(coef(glm(UWCBs ~ bmi3,
+                                 data = data_new, family=binomial())))[2:5]
+
+rownames(OR_unadjusted) = c("BMI4:Slightly overweight",
+                            "BMI2:Slightly Underweight",
+                            "BMI5:Very overweight",
+                            "BMI1:Very underweight")
+colnames(OR_unadjusted) = c(years, "Overall")
+```
+
+```{r}
+options(digits = 4)
+OR_unadjusted
+```
+
+(12/27) overall unadjusted model with spline(year)
+```{r}
+uwcb.unadjusted.overall <- glm(UWCBs ~ bmi3,
+                              data = data_new, family=binomial())
+uwcb.unadjusted.bs <- glm(UWCBs ~ bmi3 + bSpline(year, df=5), data = data_new, family=binomial())
+exp(coef(uwcb.unadjusted.bs))[2:5]
+```
+
+Inferential Analysis - other risk behaviors
+```{r}
+cor <- data_new %>%
+  select(age, sex, drive_drink, suicide, smoke, alcohol2, marijuana2, sexual, condom2, PE, 
+         BMI, `weight management`, UWCBs) %>%
+   filter(!is.na(age)) %>%
+  filter(!is.na(sex)) %>%
+  filter(!is.na(drive_drink)) %>%
+  filter(!is.na(suicide)) %>%
+  filter(!is.na(smoke)) %>%
+  filter(!is.na(alcohol2)) %>%
+  filter(!is.na(marijuana2)) %>%
+  filter(!is.na(sexual)) %>%
+  filter(!is.na(condom2)) %>%
+  filter(!is.na(PE)) %>%
+  filter(!is.na(BMI)) %>%
+  filter(!is.na(UWCBs))%>%
+  filter(!is.na(`weight management`))
+
+corr <- cor(cor, method = 'pearson')
+col1=  colorRampPalette(c(piratepal("pony", length.out = 1), 'white', 'blue'))  
+```
+
+
+```{r}
+corrplot(corr, method = 'color', tl.cex = 0.9, tl.col = 'black', col = col1(10)) 
+corrplot(corr, method = 'number', number.cex = 0.7, tl.cex = 0.9, tl.col = 'black', col = col1(10))
+```
+
+```{r}
+OR_adjusted = matrix(0,4,9)
+
+OR_adjusted[,1]=exp(coef(glm(UWCBs ~ bmi3 + `weight management2`,
+                             data = data_1999,family=binomial())))[2:5]
+OR_adjusted[,2]=exp(coef(glm(UWCBs ~ bmi3 + `weight management2`,
+                 data = data_2001, family=binomial())))[2:5]
+OR_adjusted[,3]=exp(coef(glm(UWCBs ~ bmi3 + `weight management2`,
+                 data = data_2003, family=binomial())))[2:5]
+OR_adjusted[,4]=exp(coef(glm(UWCBs ~ bmi3 + `weight management2`,
+                 data = data_2005, family=binomial())))[2:5]
+OR_adjusted[,5]=exp(coef(glm(UWCBs ~ bmi3 + `weight management2`,
+                 data = data_2007, family=binomial())))[2:5]
+OR_adjusted[,6]=exp(coef(glm(UWCBs ~ bmi3 + `weight management2`,
+                 data = data_2009, family=binomial())))[2:5]
+OR_adjusted[,7]=exp(coef(glm(UWCBs ~ bmi3 + `weight management2`,
+                 data = data_2011, family=binomial())))[2:5]
+OR_adjusted[,8]=exp(coef(glm(UWCBs ~ bmi3 + `weight management2`,
+                 data = data_2013, family=binomial())))[2:5]
+OR_adjusted[,9] = exp(coef(glm(UWCBs ~ bmi3 + `weight management2`,
+                                 data = data_new, family=binomial())))[2:5]
+
+rownames(OR_adjusted) = c("BMI4:Slightly overweight",
+                            "BMI2:Slightly Underweight",
+                            "BMI5:Very overweight",
+                            "BMI1:Very underweight")
+colnames(OR_adjusted) = c(years, "Overall")
+#View(as.data.frame(OR_adjusted))
+
+OR_adjusted
+```
+
+(12/27) overall adjusted model with spline(year)
+```{r}
+uwcb.adj.overall <- glm(UWCBs ~ bmi3 + `weight management2`, data = data_new,
+                    family=binomial())
+uwcb.adj.bs <- glm(UWCBs ~ bmi3 + `weight management2` + bSpline(year, df=5),
+                   data = data_new, family=binomial())
+exp(coef(uwcb.adj.bs))[2:5]
+```
+
+
+```{r}
+uwcb.adj.overall <- glm(UWCBs ~ bmi3 + `weight management2`, data = data_new,
+                    family=binomial())
+summary(glm(uwcb.adj.overall))
+
+```
+
+
+```{r}
+OR_potential = matrix(0,4,9)
+
+OR_potential[,1]=exp(coef(glm(UWCBs ~ bmi3 + sex2 + race3 + drive_drink2 + suicide2 +
+                 smoke2 + alcohol2 + sexual2 + `weight management2`,
+                             data = data_1999,family=binomial())))[2:5]
+OR_potential[,2]=exp(coef(glm(UWCBs ~ bmi3 + sex2 + race3 + drive_drink2 + suicide2 +
+                 smoke2 + alcohol2 + sexual2 + `weight management2`,
+                 data = data_2001, family=binomial())))[2:5]
+OR_potential[,3]=exp(coef(glm(UWCBs ~ bmi3 + sex2 + race3 + drive_drink2 + suicide2 +
+                 smoke2 + alcohol2 + sexual2 + `weight management2`,
+                 data = data_2003, family=binomial())))[2:5]
+OR_potential[,4]=exp(coef(glm(UWCBs ~ bmi3 + sex2 + race3 + drive_drink2 + suicide2 +
+                 smoke2 + alcohol2 + sexual2 + `weight management2`,
+                 data = data_2005, family=binomial())))[2:5]
+OR_potential[,5]=exp(coef(glm(UWCBs ~ bmi3 + sex2 + race3 + drive_drink2 + suicide2 +
+                 smoke2 + alcohol2 + sexual2 + `weight management2`,
+                 data = data_2007, family=binomial())))[2:5]
+OR_potential[,6]=exp(coef(glm(UWCBs ~ bmi3 + sex2 + race3 + drive_drink2 + suicide2 +
+                 smoke2 + alcohol2 + sexual2 + `weight management2`,
+                 data = data_2009, family=binomial())))[2:5]
+OR_potential[,7]=exp(coef(glm(UWCBs ~ bmi3 + sex2 + race3 + drive_drink2 + suicide2 +
+                 smoke2 + alcohol2 + sexual2 + `weight management2`,
+                 data = data_2011, family=binomial())))[2:5]
+OR_potential[,8]=exp(coef(glm(UWCBs ~ bmi3 + sex2 + race3 + drive_drink2 + suicide2 +
+                 smoke2 + alcohol2 + sexual2 + `weight management2`,
+                 data = data_2013, family=binomial())))[2:5]
+OR_potential[,9] = exp(coef(glm(UWCBs ~ bmi3 + sex2 + race3 + drive_drink2 + suicide2 +
+                 smoke2 + alcohol2 + sexual2 + `weight management2`,
+                                 data = data_new, family=binomial())))[2:5]
+
+rownames(OR_potential) = c("BMI4:Slightly overweight",
+                            "BMI2:Slightly Underweight",
+                            "BMI5:Very overweight",
+                            "BMI1:Very underweight")
+colnames(OR_potential) = c(years, "Overall")
+#View(as.data.frame(OR_potential))
+
+OR_potential
+```
+
+
+```{r}
+coef( glm(UWCBs ~ sex2 + race3 + bmi3 + drive_drink2 + suicide2 +
+                 smoke2 + alcohol2 + sexual2 + `weight management2`,
+                 data = data_new, family=binomial()))
+
+summary( glm(UWCBs ~ bmi3*`weight management2`, data = data_new, family=binomial()))
+```
+
+12/27/2021
+Including 'year' effect in the model as a flexible form by using spline(year)
+```{r}
+uwcb.potential.overall <- glm(UWCBs ~ bmi3 + sex2 + race3 + drive_drink2 + suicide2 +
+                                smoke2 + alcohol2 + sexual2 + `weight management2`,
+                              data = data_new, family=binomial())
+#AIC = 63892
+uwcb.potential.bs <- glm(UWCBs ~ bmi3 + sex2 + race3 + drive_drink2 + suicide2 +
+                                smoke2 + alcohol2 + sexual2 + `weight management2`+
+                           bSpline(year, df=5), data = data_new, family=binomial())
+#AIC(df=3): 63832
+#AIC(df=4): 63802
+#AIC(df=5): 63799
+#AIC(df=6): 63801
+
+exp(coef(uwcb.potential.bs))[2:5]
+```
+
+
+
